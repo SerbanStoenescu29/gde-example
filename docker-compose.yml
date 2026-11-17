@@ -1,0 +1,15 @@
+services:
+  chatbot:
+    build: .
+    image: chatbot:latest
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+    environment:
+      AWS_REGION: us-east-1
+      # BEDROCK_MODEL_ID: global.anthropic.claude-opus-4-6-v1
+    volumes:
+      - chatbot-data:/data
+
+volumes:
+  chatbot-data:

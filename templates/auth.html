@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ 'Create account' if mode == 'register' else 'Log in' }} · Chatbot</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-body">
+  <main class="auth-card">
+    <div class="logo big">AI</div>
+    <h1>{{ 'Create your account' if mode == 'register' else 'Welcome back' }}</h1>
+
+    {% if error %}
+      <div class="auth-error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" class="auth-form" autocomplete="on">
+      <label>
+        Username
+        <input name="username" type="text" value="{{ username or '' }}" required autofocus
+               autocomplete="username" minlength="3" maxlength="30"
+               pattern="[A-Za-z0-9_.\-]{3,30}">
+      </label>
+      <label>
+        Password
+        <input name="password" type="password" required minlength="8"
+               autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}">
+      </label>
+      {% if mode == 'register' %}
+      <label>
+        Confirm password
+        <input name="confirm" type="password" required minlength="8" autocomplete="new-password">
+      </label>
+      {% endif %}
+      <button type="submit" class="auth-submit">
+        {{ 'Create account' if mode == 'register' else 'Log in' }}
+      </button>
+    </form>
+
+    <p class="auth-switch">
+      {% if mode == 'register' %}
+        Already have an account? <a href="{{ url_for('login') }}">Log in</a>
+      {% else %}
+        New here? <a href="{{ url_for('register') }}">Create an account</a>
+      {% endif %}
+    </p>
+  </main>
+</body>
+</html>

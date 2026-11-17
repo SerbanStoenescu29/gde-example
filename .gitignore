@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local data and secrets - never commit these
+*.db
+.secret_key
+.env
+.aws/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
