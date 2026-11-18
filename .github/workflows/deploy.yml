@@ -1,0 +1,149 @@
+name: Deploy to EC2
+
+# Every push to main builds the image, tests it, pushes it to ECR and restarts
+# the EC2 instance. The instance's boot script pulls :latest from ECR and runs
+# the new container, so a reboot is what rolls out the new version.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+  workflow_dispatch: # manual re-deploy from the Actions tab
+
+# Never run two deployments at once; queue instead of cancelling a running one.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # request the OIDC token used to log in to AWS (no stored keys)
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: chatbot-serban-stoenescu
+  INSTANCE_ID: i-0d6461af78d804ce2 # gde-serban-stoenescu
+  AWS_ROLE_ARN: arn:aws:iam::881490130721:role/gde-serban-stoenescu-github-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build locally first so a broken image is never pushed as :latest.
+      - name: Build image (for testing)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          provenance: false
+          tags: chatbot:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the image
+        run: |
+          docker run -d --name smoke -p 8000:8000 chatbot:test
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health | grep -q '"ok"'; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::Health check failed"; docker logs smoke; exit 1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/)
+          loc=$(curl -s -o /dev/null -w '%{redirect_url}' http://127.0.0.1:8000/)
+          echo "GET / -> $code $loc"
+          if [ "$code" != 302 ] || [[ "$loc" != */login ]]; then
+            echo "::error::Expected / to redirect to /login"; docker logs smoke; exit 1
+          fi
+          docker rm -f smoke
+
+      - name: Push image to ECR
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+
+      - name: Restart the instance and wait for the new version
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -uo pipefail
+          echo "Deploying image digest: $DIGEST"
+
+          console() {
+            aws ec2 get-console-output --instance-id "$INSTANCE_ID" --latest \
+              --query Output --output text 2>/dev/null || true
+          }
+
+          reboot_epoch=$(date +%s)
+          aws ec2 reboot-instances --instance-id "$INSTANCE_ID"
+          echo "Reboot requested; waiting for the boot script to pull and start the new image..."
+
+          # The instance's boot script logs "[deploy] start <date>", the pulled
+          # "Digest: sha256:...", and "[deploy] DONE" to the console. Wait until
+          # a boot that started after our reboot shows our digest and DONE.
+          for i in $(seq 1 60); do
+            sleep 15
+            out=$(console)
+            start_line=$(printf '%s\n' "$out" | grep '\[deploy\] start' | tail -1 || true)
+            [ -z "$start_line" ] && continue
+            start_epoch=$(date -d "${start_line##*start }" +%s 2>/dev/null || echo 0)
+            # Ignore boots that began before this reboot (30s clock-skew allowance).
+            [ "$start_epoch" -lt $((reboot_epoch - 30)) ] && continue
+
+            section=$(printf '%s\n' "$out" | awk '/\[deploy\] start/{buf=""} {buf=buf"\n"$0} END{print buf}')
+            if grep -q 'PULL FAILED' <<<"$section"; then
+              echo "::error::Instance failed to pull the image"; echo "$section" | tail -20; exit 1
+            fi
+            if grep -q "$DIGEST" <<<"$section" && grep -q '\[deploy\] DONE' <<<"$section"; then
+              echo "Instance is running digest $DIGEST"
+              echo "$section" | grep '\[deploy\]' || true
+              deployed=1; break
+            fi
+          done
+          if [ "${deployed:-0}" != 1 ]; then
+            echo "::error::Timed out waiting for the instance to deploy the new image"
+            printf '%s\n' "$(console)" | tail -25
+            exit 1
+          fi
+
+      # Informational only: the security group may not allow GitHub's runners.
+      - name: Check the public endpoint (best effort)
+        continue-on-error: true
+        run: |
+          ip=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+          url="http://$ip:8002"
+          if curl -fsS --max-time 10 "$url/health" >/dev/null; then
+            echo "Live and healthy at $url"
+            echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+            echo "Live at $url (commit \`${GITHUB_SHA::7}\`)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice::Could not reach $url from GitHub (security group may restrict access). The deployment itself was verified via the instance boot log."
+          fi

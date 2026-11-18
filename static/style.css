@@ -117,6 +117,32 @@ button { font: inherit; color: inherit; }
 .logout-btn { display: block; color: var(--muted); }
 .logout-btn:hover { color: var(--danger); }
 
+/* ---------- Robot mascot ---------- */
+.robot { width: 150px; height: auto; display: block; margin: 0 auto 8px; overflow: visible; }
+.auth-card .robot { width: 110px; }
+.robot * { transform-box: fill-box; }
+.robot-shadow { fill: rgba(99, 102, 241, 0.25); transform-origin: center; animation: robot-shadow 3.2s ease-in-out infinite; }
+.robot-float { animation: robot-float 3.2s ease-in-out infinite; }
+.robot-bulb { fill: #fbbf24; transform-origin: center; animation: robot-bulb 1.6s ease-in-out infinite; }
+.robot-heart { fill: #67e8f9; transform-origin: center; animation: robot-heart 1.6s ease-in-out infinite; }
+.robot-eyes { animation: robot-look 6s ease-in-out infinite; }
+.robot-eye { fill: #67e8f9; transform-origin: center; animation: robot-blink 4.5s infinite; filter: drop-shadow(0 0 4px #22d3ee); }
+.robot-mouth { transform-origin: center; animation: robot-smile 4.5s ease-in-out infinite; }
+.robot-wave { transform-origin: 50% 0%; animation: robot-wave 2.4s ease-in-out infinite; }
+
+@keyframes robot-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes robot-shadow { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.8); opacity: 0.6; } }
+@keyframes robot-bulb { 0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px #fbbf24); } 50% { transform: scale(1.3); filter: drop-shadow(0 0 8px #fbbf24); } }
+@keyframes robot-heart { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.25); opacity: 1; } }
+@keyframes robot-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.08); } }
+@keyframes robot-look { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 60% { transform: translateX(4px); } }
+@keyframes robot-smile { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(1.15) translateY(1px); } }
+@keyframes robot-wave { 0%, 55%, 100% { transform: rotate(0); } 62% { transform: rotate(-28deg); } 70% { transform: rotate(10deg); } 78% { transform: rotate(-24deg); } 86% { transform: rotate(6deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .robot *, .robot-float, .robot-eyes { animation: none !important; }
+}
+
 /* ---------- Auth pages ---------- */
 .auth-body { display: grid; place-items: center; padding: 20px; overflow: auto; }
 .auth-card {

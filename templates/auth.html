@@ -8,7 +8,7 @@
 </head>
 <body class="auth-body">
   <main class="auth-card">
-    <div class="logo big">AI</div>
+    {% include "_robot.html" %}
     <h1>{{ 'Create your account' if mode == 'register' else 'Welcome back' }}</h1>
 
     {% if error %}
