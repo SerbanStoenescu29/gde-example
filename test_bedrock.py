@@ -12,6 +12,7 @@ try:
     print("ARN:", identity["Arn"])
 
     bedrock = session.client("bedrock-runtime")
+    
 
     response = bedrock.converse(
         modelId=MODEL_ID,
