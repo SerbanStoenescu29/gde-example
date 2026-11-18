@@ -34,6 +34,23 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
+      # TEMPORARY: print the OIDC subject so the IAM trust policy can be matched.
+      - name: Debug OIDC subject
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import os, json, base64, urllib.request
+          req = urllib.request.Request(
+              os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=sts.amazonaws.com",
+              headers={"Authorization": "bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]})
+          tok = json.load(urllib.request.urlopen(req))["value"]
+          p = tok.split(".")[1]; p += "=" * (-len(p) % 4)
+          c = json.loads(base64.urlsafe_b64decode(p))
+          print("::notice title=OIDC sub::" + str(c.get("sub")))
+          print("::notice title=OIDC aud::" + str(c.get("aud")))
+          print("::notice title=OIDC claims::" + ",".join(sorted(c.keys())))
+          PY
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
